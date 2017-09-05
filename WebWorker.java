@@ -25,6 +25,7 @@ import java.lang.Runnable;
 import java.io.*;
 import java.util.Date;
 import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.TimeZone;
 
 public class WebWorker implements Runnable
@@ -48,12 +49,16 @@ public WebWorker(Socket s)
 **/
 public void run()
 {
+ 
    System.err.println("Handling connection...");
    try {
       InputStream  is = socket.getInputStream();
       OutputStream os = socket.getOutputStream();
-      readHTTPRequest(is);
-      writeContent(os,true);
+      String Path=readHTTPRequest(is);
+      boolean WasAbleToRead=ReadFile(Path);
+      BufferedReader file = new BufferedReader(new FileReader("../"+Path));
+      writeHTTPHeader(os,"text/html", WasAbleToRead);
+      writeContent(os,file);
       os.flush();
       socket.close();
    } catch (Exception e) {
@@ -65,57 +70,45 @@ public void run()
 
 /**
 * Read the HTTP request header.
+ * @throws Exception 
 **/
-private void readHTTPRequest(InputStream is)
+private String readHTTPRequest(InputStream is) throws Exception
 {
-   String line;
+   
    BufferedReader r = new BufferedReader(new InputStreamReader(is));
-   while (true) {
-      try {
-    	 OutputStream os = socket.getOutputStream();
-         while (!r.ready()) Thread.sleep(1);
-         line = r.readLine();
-         System.err.println("Request line: ("+line+")");
-         if(line.contains("GET")) {
-        	 String path=line.substring(line.indexOf('/'), line.lastIndexOf('H'));
-             boolean WasAbleToRead=ReadFile(path);
-             writeHTTPHeader(os,"text/html", WasAbleToRead);
-         }
-         if (line.length()==0) break; 
-      } catch (Exception e) {
-         System.err.println("Request error: "+e);
-         break;
-      }
-   }
-   return;
+   String line =r.readLine();
+   //String path[]=line.slit(" ");
+   String path=line.substring(line.indexOf('/'), line.lastIndexOf('H'));
+   return path;
 }
 
+@SuppressWarnings("resource")
 private boolean ReadFile(String path)   {
-	//String TagsInFile;
-	//OutputStream os = socket.getOutputStream();
-	File file = new File(path);
+	String line;
+	try {
+		BufferedReader F = new BufferedReader(new FileReader(".\\"+path));
 
-	if(file.canRead())   
-		System.out.print("123");
-	else 
-		System.out.print(file);
-	/*try {
-		FileReader fileReader = new FileReader(path);
-		
-        // Always wrap FileReader in BufferedReader.
-        BufferedReader bufferedReader = new BufferedReader(fileReader);
-
-		while((line = bufferedReader.readLine()) != null) {
-            
-        }   
+		try {
+			if((line = F.readLine()) != null) {
+			    return true;
+			}
+		} catch (IOException e) {
+			System.out.println("Unable to open file ");   
+	        return false;
+		}   
 
         // Always close files.
-        bufferedReader.close();   
+        try {
+			F.close();
+		} catch (IOException e) {
+			System.out.println("Unable to close file ");   
+	        return true;
+		}   
 	}
     catch(FileNotFoundException ex) {
-        System.out.println(
-            "Unable to open file ");                
-    }*/
+        System.out.println("Unable to open file ");   
+        return false;
+    }
 	return true;
 }
 
@@ -150,14 +143,49 @@ private void writeHTTPHeader(OutputStream os, String contentType, boolean FileEx
 * Write the data content to the client network connection. This MUST
 * be done after the HTTP header has been written out.
 * @param os is the OutputStream object to write to
+ * @throws IOException 
 **/
-private void writeContent(OutputStream os, boolean FileExists) throws Exception
+private void writeContent(OutputStream os, BufferedReader file) throws IOException
 {
    os.write("<html><head></head><body>\n".getBytes());
-   if(FileExists==false)
-	   os.write("<h3>404 : Not Found </h3>\n".getBytes());
-   else{
-	   os.write("<h3>********</h3>\n".getBytes());
+   String line;
+	try {
+		BufferedReader F = new BufferedReader(new FileReader(".\\"+file));
+		DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
+		Date dateobj = new Date();
+		System.out.println(df.format(dateobj));
+		
+		try {
+			if((line = F.readLine()) != null) {
+				if(line.indexOf(">")==line.lastIndexOf(">")) {
+					if(line.contains("date"))
+						os.write("<h3>df.format(dateobj)</h3>\n".getBytes());
+					else
+						os.write("<h3>Web Server name: Xitlally's Server</h3>\n".getBytes());
+				}
+				else {
+					while(line.indexOf(">")!=line.lastIndexOf(">")) {
+						if(line.charAt(line.indexOf('>')-1)=='e')
+							os.write("<h3>df.format(dateobj)</h3>\n".getBytes());
+						else
+							os.write("<h3>Web Server name: Xitlally's Server</h3>\n".getBytes());
+						line.subSequence(line.indexOf('>')+1, line.length()-1);
+					}
+				}
+			}
+		} catch (IOException e) {
+			System.out.println("Unable to open file ");
+		}   
+
+       // Always close files.
+		try {
+			F.close();
+		} catch (IOException e) {
+			System.out.println("Unable to close file ");
+		}  
+	}
+   catch(FileNotFoundException ex) {
+       System.out.println("Unable to open file ");
    }
    os.write("</body></html>\n".getBytes());
 }
