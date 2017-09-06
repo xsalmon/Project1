@@ -25,7 +25,6 @@ import java.lang.Runnable;
 import java.io.*;
 import java.util.Date;
 import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.TimeZone;
 
 public class WebWorker implements Runnable
@@ -46,6 +45,11 @@ public WebWorker(Socket s)
 * request and then returns, which destroys the thread. This method
 * assumes that whoever created the worker created it with a valid
 * open socket object.
+* 
+* Modified on 9/5/17 by Xitlally Salmon: The changes that I did to this method was to add 
+* the boolean WasAbleToRead which is true when the file exists and is readable other wise it is false.
+* Another change to the Method was the fact that the writeContent() will not be called unless WasAbleToRead
+* is true
 **/
 public void run()
 {
@@ -56,9 +60,9 @@ public void run()
       OutputStream os = socket.getOutputStream();
       String Path=readHTTPRequest(is);
       boolean WasAbleToRead=ReadFile(Path);
-      BufferedReader file = new BufferedReader(new FileReader("../"+Path));
       writeHTTPHeader(os,"text/html", WasAbleToRead);
-      writeContent(os,file);
+      if(WasAbleToRead==true)
+    	  writeContent(os,Path);
       os.flush();
       socket.close();
    } catch (Exception e) {
@@ -70,30 +74,52 @@ public void run()
 
 /**
 * Read the HTTP request header.
+* Modified on 9/5/17 by Xitlally Salmon: The changes that I made to this method was to change the return type
+* to a string so that it can return the path to the file for the rest of the methods, to do this I added a
+* if statement that will only be true when the while loop has iterated only  once because the first line is
+* the one with the path, to get just the path I use split on the spaces and get the second entry.
  * @throws Exception 
 **/
-private String readHTTPRequest(InputStream is) throws Exception
+private String readHTTPRequest(InputStream is)
 {
-   
-   BufferedReader r = new BufferedReader(new InputStreamReader(is));
-   String line =r.readLine();
-   //String path[]=line.slit(" ");
-   String path=line.substring(line.indexOf('/'), line.lastIndexOf('H'));
-   return path;
+	   String line = null;
+	   String[] path = null;
+	   int lineNumber=1;
+	   BufferedReader r = new BufferedReader(new InputStreamReader(is));
+	   while (true) {
+	      try {
+	         while (!r.ready()) Thread.sleep(1);
+	         line = r.readLine();
+	         if(lineNumber==1) {
+	        	 path=line.split(" ");
+	         }
+	         System.err.println("Request line: ("+line+")");
+	         lineNumber++;
+	         if (line.length()==0) break;
+	      } catch (Exception e) {
+	         System.err.println("Request error: "+e);
+	         break;
+	      }
+	   }
+       return path[1];
 }
 
-@SuppressWarnings("resource")
+/*
+ *Made on 9/5/17 by Xitlally Salmon: This method is to just check to make sure the file
+ *is readable, it returns a boolean that is then saved into WasAbleToRead in run  
+ */
 private boolean ReadFile(String path)   {
 	String line;
 	try {
-		BufferedReader F = new BufferedReader(new FileReader(".\\"+path));
+		BufferedReader F = new BufferedReader(new FileReader("./"+path));
 
 		try {
 			if((line = F.readLine()) != null) {
+				F.close();
 			    return true;
 			}
 		} catch (IOException e) {
-			System.out.println("Unable to open file ");   
+			System.out.println("Unable to open file ");  
 	        return false;
 		}   
 
@@ -116,6 +142,10 @@ private boolean ReadFile(String path)   {
 * Write the HTTP header lines to the client network connection.
 * @param os is the OutputStream object to write to
 * @param contentType is the string MIME content type (e.g. "text/html")
+* 
+* Modified on 9/5/17 by Xitlally Salmon: The only thing that I changed in this was to add a
+* parm, which is a boolean and if its try the method will send out a 202 code  it will send
+* out a 404 error code 
 **/
 private void writeHTTPHeader(OutputStream os, String contentType, boolean FileExists) throws Exception
 {
@@ -124,8 +154,9 @@ private void writeHTTPHeader(OutputStream os, String contentType, boolean FileEx
    df.setTimeZone(TimeZone.getTimeZone("GMT"));
    if(FileExists==true)
 	   os.write("HTTP/1.1 200 OK\n".getBytes());
-   else
+   else {
 	   os.write("HTTP/1.1 404: Not Found\n".getBytes());
+   }
    os.write("Date: ".getBytes());
    os.write((df.format(d)).getBytes());
    os.write("\n".getBytes());
@@ -144,30 +175,30 @@ private void writeHTTPHeader(OutputStream os, String contentType, boolean FileEx
 * be done after the HTTP header has been written out.
 * @param os is the OutputStream object to write to
  * @throws IOException 
+ * 
+ * Modified on 9/5/17 by Xitlally Salmon: The changes that I made to this method was to read the file
+ * that was at the end of the file path and do the tag substitution for what is written in the file
+ * both when the tags are on new lines and when the tags are right next to each other
 **/
-private void writeContent(OutputStream os, BufferedReader file) throws IOException
+private void writeContent(OutputStream os, String file) throws IOException
 {
    os.write("<html><head></head><body>\n".getBytes());
    String line;
 	try {
-		BufferedReader F = new BufferedReader(new FileReader(".\\"+file));
-		DateFormat df = new SimpleDateFormat("dd/MM/yy HH:mm:ss");
-		Date dateobj = new Date();
-		System.out.println(df.format(dateobj));
+		BufferedReader F = new BufferedReader(new FileReader("../"+file));
 		
 		try {
 			if((line = F.readLine()) != null) {
 				if(line.indexOf(">")==line.lastIndexOf(">")) {
 					if(line.contains("date"))
-						os.write("<h3>df.format(dateobj)</h3>\n".getBytes());
+						os.write(" <script language=\"javascript\">\nvar today = new Date();\ndocument.write(today);\n</script>".getBytes());
 					else
 						os.write("<h3>Web Server name: Xitlally's Server</h3>\n".getBytes());
 				}
 				else {
 					while(line.indexOf(">")!=line.lastIndexOf(">")) {
 						if(line.charAt(line.indexOf('>')-1)=='e')
-							os.write("<h3>df.format(dateobj)</h3>\n".getBytes());
-						else
+							os.write(" <script language=\"javascript\">\nvar today = new Date();\ndocument.write(today);\n</script>".getBytes());						else
 							os.write("<h3>Web Server name: Xitlally's Server</h3>\n".getBytes());
 						line.subSequence(line.indexOf('>')+1, line.length()-1);
 					}
